@@ -1,7 +1,7 @@
 {
-  "name": "@tobilu/qmd",
-  "version": "2.1.0",
-  "description": "Query Markup Documents - On-device hybrid search for markdown files with BM25, vector search, and LLM reranking",
+  "name": "@cloudacio/qmd-bedrock",
+  "version": "2.1.0-bedrock.1",
+  "description": "Hybrid markdown search (BM25 + vector + LLM rerank) with an AWS Bedrock embedding backend. Fork of @tobilu/qmd that swaps the on-device embedder for Bedrock titan-embed-text-v2, eliminating CPU-bound local inference.",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -38,11 +38,11 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/tobi/qmd.git"
+    "url": "git+https://github.com/jpolivera/qmd-bedrock.git"
   },
-  "homepage": "https://github.com/tobi/qmd#readme",
+  "homepage": "https://github.com/jpolivera/qmd-bedrock#readme",
   "bugs": {
-    "url": "https://github.com/tobi/qmd/issues"
+    "url": "https://github.com/jpolivera/qmd-bedrock/issues"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.29.0",
@@ -56,6 +56,7 @@
     "zod": "4.2.1"
   },
   "optionalDependencies": {
+    "@aws-sdk/client-bedrock-runtime": "^3.700.0",
     "sqlite-vec-darwin-arm64": "0.1.9",
     "sqlite-vec-darwin-x64": "0.1.9",
     "sqlite-vec-linux-arm64": "0.1.9",

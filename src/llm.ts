@@ -17,6 +17,7 @@ import {
 import { homedir } from "os";
 import { join } from "path";
 import { existsSync, mkdirSync, statSync, unlinkSync, readdirSync, readFileSync, writeFileSync, openSync, readSync, closeSync } from "fs";
+import { bedrockEmbed, bedrockEmbedBatch, bedrockEmbedModel, isBedrockEmbedEnabled } from "./bedrock-embed.js";
 
 // =============================================================================
 // Embedding Formatting Functions
@@ -500,8 +501,14 @@ export class LlamaCpp implements LLM {
   private disposed = false;
 
 
+  // Bedrock backend short-circuits the local embedding path entirely.
+  // When true, embed()/embedBatch() never load a llama model.
+  private readonly bedrockEmbedEnabled: boolean = isBedrockEmbedEnabled();
+
   constructor(config: LlamaCppConfig = {}) {
-    this.embedModelUri = config.embedModel || process.env.QMD_EMBED_MODEL || DEFAULT_EMBED_MODEL;
+    this.embedModelUri = this.bedrockEmbedEnabled
+      ? (config.embedModel || bedrockEmbedModel())
+      : (config.embedModel || process.env.QMD_EMBED_MODEL || DEFAULT_EMBED_MODEL);
     this.generateModelUri = config.generateModel || process.env.QMD_GENERATE_MODEL || DEFAULT_GENERATE_MODEL;
     this.rerankModelUri = config.rerankModel || process.env.QMD_RERANK_MODEL || DEFAULT_RERANK_MODEL;
     this.modelCacheDir = config.modelCacheDir || MODEL_CACHE_DIR;
@@ -908,8 +915,17 @@ export class LlamaCpp implements LLM {
   /**
    * Tokenize text using the embedding model's tokenizer
    * Returns tokenizer tokens (opaque type from node-llama-cpp)
+   *
+   * Bedrock backend: returns a fake token array sized by a 4-chars/token
+   * heuristic. The chunker only consults `.length` to decide whether to
+   * re-split, so exact token values are unnecessary. Bedrock titan-embed-v2
+   * has a 50K-token input ceiling — well above qmd's chunk sizes.
    */
   async tokenize(text: string): Promise<readonly LlamaToken[]> {
+    if (this.bedrockEmbedEnabled) {
+      const n = Math.max(1, Math.ceil(text.length / 4));
+      return new Array(n).fill(0) as unknown as readonly LlamaToken[];
+    }
     await this.ensureEmbedContext();  // Ensure model is loaded
     if (!this.embedModel) {
       throw new Error("Embed model not loaded");
@@ -921,14 +937,25 @@ export class LlamaCpp implements LLM {
    * Count tokens in text using the embedding model's tokenizer
    */
   async countTokens(text: string): Promise<number> {
+    if (this.bedrockEmbedEnabled) {
+      return Math.max(1, Math.ceil(text.length / 4));
+    }
     const tokens = await this.tokenize(text);
     return tokens.length;
   }
 
   /**
    * Detokenize token IDs back to text
+   *
+   * Bedrock backend: cannot reverse a heuristic. The chunker only invokes
+   * detokenize in a pathological fallback path that's unreachable under
+   * Bedrock's input limits. Return empty so any caller that lands here
+   * produces an empty chunk (which downstream skips).
    */
   async detokenize(tokens: readonly LlamaToken[]): Promise<string> {
+    if (this.bedrockEmbedEnabled) {
+      return "";
+    }
     await this.ensureEmbedContext();
     if (!this.embedModel) {
       throw new Error("Embed model not loaded");
@@ -973,6 +1000,13 @@ export class LlamaCpp implements LLM {
   }
 
   async embed(text: string, options: EmbedOptions = {}): Promise<EmbeddingResult | null> {
+    // Bedrock backend: skip llama entirely.
+    if (this.bedrockEmbedEnabled) {
+      const result = await bedrockEmbed(text);
+      if (result && options.model) result.model = options.model;
+      return result;
+    }
+
     // Ping activity at start to keep models alive during this operation
     this.touchActivity();
 
@@ -1002,6 +1036,16 @@ export class LlamaCpp implements LLM {
    * Uses Promise.all for parallel embedding - node-llama-cpp handles batching internally
    */
   async embedBatch(texts: string[], options: EmbedOptions = {}): Promise<(EmbeddingResult | null)[]> {
+    // Bedrock backend: skip llama entirely. CI guard does not apply since
+    // no local model is touched.
+    if (this.bedrockEmbedEnabled) {
+      const results = await bedrockEmbedBatch(texts);
+      if (options.model) {
+        for (const r of results) if (r) r.model = options.model;
+      }
+      return results;
+    }
+
     if (this._ciMode) throw new Error("LLM operations are disabled in CI (set CI=true)");
     // Ping activity at start to keep models alive during this operation
     this.touchActivity();
