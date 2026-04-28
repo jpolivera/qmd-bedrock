@@ -18,6 +18,8 @@ import { homedir } from "os";
 import { join } from "path";
 import { existsSync, mkdirSync, statSync, unlinkSync, readdirSync, readFileSync, writeFileSync, openSync, readSync, closeSync } from "fs";
 import { bedrockEmbed, bedrockEmbedBatch, bedrockEmbedModel, isBedrockEmbedEnabled } from "./bedrock-embed.js";
+import { bedrockRerank, isBedrockRerankEnabled } from "./bedrock-rerank.js";
+import { bedrockExpandQuery, isBedrockExpandEnabled } from "./bedrock-expand.js";
 
 // =============================================================================
 // Embedding Formatting Functions
@@ -504,6 +506,8 @@ export class LlamaCpp implements LLM {
   // Bedrock backend short-circuits the local embedding path entirely.
   // When true, embed()/embedBatch() never load a llama model.
   private readonly bedrockEmbedEnabled: boolean = isBedrockEmbedEnabled();
+  private readonly bedrockRerankEnabled: boolean = isBedrockRerankEnabled();
+  private readonly bedrockExpandEnabled: boolean = isBedrockExpandEnabled();
 
   constructor(config: LlamaCppConfig = {}) {
     this.embedModelUri = this.bedrockEmbedEnabled
@@ -1173,6 +1177,11 @@ export class LlamaCpp implements LLM {
   // ==========================================================================
 
   async expandQuery(query: string, options: { context?: string, includeLexical?: boolean, intent?: string } = {}): Promise<Queryable[]> {
+    // Bedrock backend: skip local generation model entirely.
+    if (this.bedrockExpandEnabled) {
+      return bedrockExpandQuery(query, options);
+    }
+
     if (this._ciMode) throw new Error("LLM operations are disabled in CI (set CI=true)");
     // Ping activity at start to keep models alive during this operation
     this.touchActivity();
@@ -1272,6 +1281,11 @@ export class LlamaCpp implements LLM {
     documents: RerankDocument[],
     options: RerankOptions = {}
   ): Promise<RerankResult> {
+    // Bedrock backend: skip local rerank model entirely.
+    if (this.bedrockRerankEnabled) {
+      return bedrockRerank(query, documents, options);
+    }
+
     if (this._ciMode) throw new Error("LLM operations are disabled in CI (set CI=true)");
     // Ping activity at start to keep models alive during this operation
     this.touchActivity();

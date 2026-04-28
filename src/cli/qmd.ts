@@ -461,10 +461,20 @@ async function showStatus(): Promise<void> {
       const match = uri.match(/^hf:([^/]+\/[^/]+)\//);
       return match ? `https://huggingface.co/${match[1]}` : uri;
     };
+    const embedBackend = (process.env.QMD_EMBED_BACKEND || "").trim().toLowerCase();
+    const rerankBackend = (process.env.QMD_RERANK_BACKEND || "").trim().toLowerCase();
+    const expandBackend = (process.env.QMD_EXPAND_BACKEND || "").trim().toLowerCase();
+    const formatModel = (backend: string, defaultUri: string, envOverride?: string) => {
+      if (backend === "bedrock") {
+        const model = envOverride || "<bedrock default>";
+        return `AWS Bedrock — ${model}`;
+      }
+      return `${hfLink(defaultUri)} (local CPU)`;
+    };
     console.log(`\n${c.bold}Models${c.reset}`);
-    console.log(`  Embedding:   ${hfLink(DEFAULT_EMBED_MODEL_URI)}`);
-    console.log(`  Reranking:   ${hfLink(DEFAULT_RERANK_MODEL_URI)}`);
-    console.log(`  Generation:  ${hfLink(DEFAULT_GENERATE_MODEL_URI)}`);
+    console.log(`  Embedding:   ${formatModel(embedBackend, DEFAULT_EMBED_MODEL_URI, process.env.QMD_EMBED_MODEL)}`);
+    console.log(`  Reranking:   ${formatModel(rerankBackend, DEFAULT_RERANK_MODEL_URI, process.env.QMD_RERANK_MODEL)}`);
+    console.log(`  Generation:  ${formatModel(expandBackend, DEFAULT_GENERATE_MODEL_URI, process.env.QMD_GENERATE_MODEL)}`);
   }
 
   // Device / GPU info
